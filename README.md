@@ -8,8 +8,8 @@ A local big data pipeline that scores bank transactions for money laundering ris
 ## Pipeline at a glance
 
 ```
-acquire -> etl -> features -> train_mllib / train_xgb -> score_mllib -> publish
-             \-> neo4j -> graph ---------------------------------------> dashboard
+acquire -> etl -> features -> train_mllib / train_xgb -> score_mllib -> publish -> graph -> dashboard
+             \-> neo4j ----------------------------------------------------------^
 ```
 
 | Stage | What it does | Code |
@@ -21,8 +21,8 @@ acquire -> etl -> features -> train_mllib / train_xgb -> score_mllib -> publish
 | `train_xgb` | Trains the XGBoost models on a single machine (optional, see `models.include_xgboost` in `pipeline/config.yaml`) | `pipeline/s05_train_xgboost.py` |
 | `score_mllib` | Scores the test periods in batch | `pipeline/s06_score_mllib.py` |
 | `neo4j` | Loads accounts, banks and transfers into Neo4j | `pipeline/s08_load_neo4j.py` |
-| `graph` | Runs degree, PageRank, WCC and Louvain with Graph Data Science | `pipeline/s10_graph_analytics.py` |
 | `publish` | Loads scores into the PostgreSQL mart through a staging swap | `pipeline/s07_publish_mart.py` |
+| `graph` | Runs degree, PageRank, WCC and Louvain with Graph Data Science; reads labels from the mart, so it runs after `publish` | `pipeline/s10_graph_analytics.py` |
 | `dashboard` | Builds the static HTML dashboard | `pipeline/s09_dashboard.py` |
 
 Settings (time split, windows, model parameters, seeds, connection URIs) live in `pipeline/config.yaml`.

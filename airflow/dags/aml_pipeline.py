@@ -1,6 +1,7 @@
 """Airflow DAG: AMLworld HI-Small pipeline (stages 1 to 4).
-acquire -> etl -> features -> train_mllib -> score_mllib -> publish -> dashboard
-                       etl -> neo4j (branch after curated data is available)       -> dashboard
+acquire -> etl -> features -> train_mllib -> score_mllib -> publish -> graph -> dashboard
+                       etl -> neo4j (branch after curated data is available) ---^
+graph reads the evaluation labels from the restricted schema that publish creates, so it runs after publish.
 train_xgb is a second branch after features that joins publish; it exists only when models.include_xgboost is true.
 Each task runs pipeline/run_stage.sh; a failed quality gate stops downstream tasks and keeps the
 previously active version."""
@@ -36,5 +37,6 @@ with DAG(
         [t["score_mllib"], t["train_xgb"]] >> t["publish"]
     else:
         t["score_mllib"] >> t["publish"]
-    t["etl"] >> t["neo4j"] >> t["graph"]
-    [t["publish"], t["graph"]] >> t["dashboard"]
+    t["etl"] >> t["neo4j"]
+    [t["publish"], t["neo4j"]] >> t["graph"]
+    t["graph"] >> t["dashboard"]
