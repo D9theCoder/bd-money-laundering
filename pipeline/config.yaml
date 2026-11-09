@@ -1,0 +1,75 @@
+# Pipeline configuration. A comment on a value explains what it means or where it comes from.
+
+dataset:
+  name: ibm_amlworld
+  variant: HI-Small
+  kaggle_slug: ealtman2019/ibm-transactions-for-anti-money-laundering-aml
+  source_dir: /opt/aml/data/source
+  files:
+    transactions: HI-Small_Trans.csv
+    accounts: HI-Small_accounts.csv
+  expected_header:
+    transactions: ["Timestamp", "From Bank", "Account", "To Bank", "Account", "Amount Received", "Receiving Currency", "Amount Paid", "Payment Currency", "Payment Format", "Is Laundering"]
+    accounts: ["Bank Name", "Bank ID", "Account Number", "Entity ID", "Entity Name"]
+
+hdfs:
+  namenode_rpc: hdfs://namenode:8020
+  webhdfs: http://namenode:9870/webhdfs/v1
+  user: aml
+  root: /aml
+
+split:                       # event date, inclusive
+  train:     ["2022-09-01", "2022-09-06"]
+  val:       ["2022-09-07", "2022-09-08"]
+  test_main: ["2022-09-09", "2022-09-10"]
+  test_add:  ["2022-09-11", "2022-09-18"]
+
+features:
+  version: v1
+  windows_hours: [6, 24]
+  same_minute_excluded: true # history t - w <= event_time < t, same minute excluded
+
+models:
+  seed: 42
+  class_weight: balanced     # weight = N / (2 * N_class), from training distribution
+  threshold_rule: max_f1_on_validation   # threshold maximises F1 on validation, then stays fixed for all test periods
+  precision_at_k: 100        # number of top-scored alerts a reviewer is assumed to check
+  include_xgboost: false     # false leaves X1/X2 out of the DAG, run_all.sh, the mart and the dashboard
+  mllib:
+    M1: {algorithm: logistic_regression, feature_set: base, positive_weight_factor: 0.02, params: {maxIter: 200, regParam: 0.001, elasticNetParam: 0.5}}   # values from the random search (s12_tune_mllib.py)
+    M2: {algorithm: logistic_regression, feature_set: base_graph, positive_weight_factor: 0.02, params: {maxIter: 200, regParam: 0.001, elasticNetParam: 0.5}}   # values from the random search (s12_tune_mllib.py)
+    M3: {algorithm: random_forest, feature_set: base, positive_weight_factor: 0.02, params: {numTrees: 60, maxDepth: 10, maxBins: 32, minInstancesPerNode: 5, featureSubsetStrategy: onethird, subsamplingRate: 0.5}}   # values from the random search (s12_tune_mllib.py)
+    M4: {algorithm: random_forest, feature_set: base_graph, positive_weight_factor: 0.02, params: {numTrees: 60, maxDepth: 10, maxBins: 32, minInstancesPerNode: 5, featureSubsetStrategy: onethird, subsamplingRate: 0.5}}   # values from the random search (s12_tune_mllib.py)
+  xgboost:                   # XGBoost on a single machine
+    n_jobs: 4                # same total cores as the Spark executors
+    X1: {feature_set: base, params: {n_estimators: 200, learning_rate: 0.1076, max_depth: 4, min_child_weight: 50, subsample: 0.93, colsample_bytree: 0.82, reg_lambda: 5.551, reg_alpha: 0.0205, gamma: 0.0, scale_pos_weight: 25.6632}}   # values from the random search (s11_tune_xgboost.py); scale_pos_weight = 0.02 x N_neg/N_pos
+    X2: {feature_set: base_graph, params: {n_estimators: 200, learning_rate: 0.0418, max_depth: 10, min_child_weight: 50, subsample: 0.67, colsample_bytree: 0.64, reg_lambda: 0.226, reg_alpha: 0.0027, gamma: 0.5, scale_pos_weight: 25.6632}}   # values from the random search (s11_tune_xgboost.py); scale_pos_weight = 0.02 x N_neg/N_pos
+
+scoring:
+  periods: [test_main, test_add]
+
+mart:
+  jdbc_url: jdbc:postgresql://postgres:5432/aml
+  user: aml
+
+neo4j:
+  uri: bolt://neo4j:7687
+  user: neo4j
+  batch_size: 20000
+
+dashboard:
+  alert_rows_per_view: 300
+  nonalert_rows_per_view: 300     # snapshot table: half highest-scoring non-alerts, half md5-ordered sample
+  subgraph_alerts_per_view: 100    # top-K alerts that get a precomputed investigation subgraph
+  subgraph_window_hours: 24        # hours on both sides of the alert, same as the longest feature window
+  subgraph_max_edges: 40           # edge cap that keeps the Cytoscape view readable
+  subgraph_max_hops: 2             # 1 to 2 hops
+
+graph_analytics:               # degree, PageRank, WCC, Louvain with GDS 2.13 defaults (PageRank damping 0.85, tolerance 1e-7; Louvain tolerance 1e-4)
+  pagerank_damping: 0.85
+  pagerank_max_iterations: 200
+  pagerank_tolerance: 0.0000001
+  louvain_max_levels: 10
+  louvain_max_iterations: 10
+  louvain_tolerance: 0.0001
+  top_n: 10

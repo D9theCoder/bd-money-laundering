@@ -1,0 +1,198 @@
+# AML AMLworld HI-Small: local Docker stack (HDFS + Spark + PostgreSQL + Neo4j + MLflow + Airflow + FastAPI)
+# All published ports are bound to 127.0.0.1 only.
+name: aml
+
+x-hadoop: &hadoop
+  image: apache/hadoop:3.4.3
+  user: root
+  env_file: ./hadoop/hadoop.env
+  restart: unless-stopped
+
+x-spark: &spark
+  image: aml-spark:1.0
+  restart: unless-stopped
+  environment:
+    HADOOP_USER_NAME: aml
+  volumes:
+    - ./pipeline:/opt/aml/pipeline:ro
+
+services:
+  namenode:
+    <<: *hadoop
+    hostname: namenode
+    command: ["hdfs", "namenode"]
+    environment:
+      ENSURE_NAMENODE_DIR: /data/nn/name
+    ports:
+      - "127.0.0.1:9870:9870"
+    volumes:
+      - nn:/data/nn
+    mem_limit: 1g
+
+  datanode1:
+    <<: *hadoop
+    hostname: datanode1
+    command: ["hdfs", "datanode"]
+    volumes:
+      - dn1:/data/dn
+    depends_on: [namenode]
+    mem_limit: 768m
+
+  datanode2:
+    <<: *hadoop
+    hostname: datanode2
+    command: ["hdfs", "datanode"]
+    volumes:
+      - dn2:/data/dn
+    depends_on: [namenode]
+    mem_limit: 768m
+
+  hdfs-init:
+    image: apache/hadoop:3.4.3
+    user: root
+    env_file: ./hadoop/hadoop.env
+    restart: "no"
+    depends_on: [namenode, datanode1, datanode2]
+    volumes:
+      - ./hadoop/init-hdfs.sh:/init-hdfs.sh:ro
+    command: ["bash", "/init-hdfs.sh"]
+
+  spark-master:
+    <<: *spark
+    build: ./docker/spark
+    hostname: spark-master
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master", "--host", "spark-master"]
+    ports:
+      - "127.0.0.1:8080:8080"
+    mem_limit: 640m
+
+  spark-worker-1:
+    <<: *spark
+    hostname: spark-worker-1
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "--cores", "2", "--memory", "2g", "spark://spark-master:7077"]
+    depends_on: [spark-master]
+    mem_limit: 2560m
+
+  spark-worker-2:
+    <<: *spark
+    hostname: spark-worker-2
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "--cores", "2", "--memory", "2g", "spark://spark-master:7077"]
+    depends_on: [spark-master]
+    mem_limit: 2560m
+
+  postgres:
+    image: postgres:17.11
+    hostname: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      AML_DB_PASSWORD: ${AML_DB_PASSWORD}
+      ANALYST_DB_PASSWORD: ${ANALYST_DB_PASSWORD}
+      RESEARCHER_DB_PASSWORD: ${RESEARCHER_DB_PASSWORD}
+      MLFLOW_DB_PASSWORD: ${MLFLOW_DB_PASSWORD}
+      AIRFLOW_DB_PASSWORD: ${AIRFLOW_DB_PASSWORD}
+    ports:
+      - "127.0.0.1:15432:5432"   # host port 15432 (5432 is reserved on this Windows host)
+    volumes:
+      - pg:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 30
+    mem_limit: 1g
+
+  neo4j:
+    image: neo4j:5.26.32-community
+    hostname: neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD}
+      NEO4J_PLUGINS: '["graph-data-science"]'   # GDS 2.13.x, used by pipeline stage s10_graph_analytics
+      NEO4J_dbms_security_procedures_unrestricted: "gds.*"
+      NEO4J_dbms_security_procedures_allowlist: "gds.*"
+      NEO4J_server_memory_heap_initial__size: 3G
+      NEO4J_server_memory_heap_max__size: 3G
+      NEO4J_server_memory_pagecache_size: 1G
+    ports:
+      - "127.0.0.1:7474:7474"
+      - "127.0.0.1:7687:7687"
+    volumes:
+      - neo4j:/data
+    mem_limit: 5g
+
+  mlflow:
+    build: ./docker/mlflow
+    image: aml-mlflow:1.0
+    hostname: mlflow
+    restart: unless-stopped
+    environment:
+      MLFLOW_DB_PASSWORD: ${MLFLOW_DB_PASSWORD}
+      HADOOP_USER_NAME: aml
+    ports:
+      - "127.0.0.1:15000:5000"   # host port 15000 (5000 is excluded on this Windows host)
+    depends_on:
+      postgres: {condition: service_healthy}
+      namenode: {condition: service_started}
+    mem_limit: 1536m
+
+  airflow:
+    build: ./docker/airflow
+    image: aml-airflow:1.0
+    hostname: airflow
+    restart: unless-stopped
+    environment:
+      HADOOP_USER_NAME: aml
+      AIRFLOW_HOME: /opt/airflow
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "True"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD}@postgres:5432/airflow
+      AML_DB_PASSWORD: ${AML_DB_PASSWORD}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    ports:
+      - "127.0.0.1:8081:8080"
+      - "127.0.0.1:4040:4040"
+    volumes:
+      - ./pipeline:/opt/aml/pipeline:ro
+      - ./web:/opt/aml/web:ro
+      - ./airflow/dags:/opt/airflow/dags:ro
+      - ./data/source:/opt/aml/data/source:ro
+      - ./dashboard:/opt/aml/dashboard
+      - ./logs/pipeline:/opt/aml/logs
+      - airflow:/opt/airflow
+    depends_on:
+      postgres: {condition: service_healthy}
+      spark-master: {condition: service_started}
+      mlflow: {condition: service_started}
+    mem_limit: 5g
+
+  api:
+    build: ./docker/api
+    image: aml-api:1.0
+    hostname: api
+    restart: unless-stopped
+    environment:
+      ANALYST_DB_PASSWORD: ${ANALYST_DB_PASSWORD}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+    ports:
+      - "127.0.0.1:18000:8000"
+    volumes:
+      - ./api:/opt/aml/api:ro
+      - ./pipeline:/opt/aml/pipeline:ro
+      - ./web:/opt/aml/web:ro
+      - ./dashboard:/opt/aml/dashboard:ro
+    depends_on:
+      postgres: {condition: service_healthy}
+      neo4j: {condition: service_started}
+    mem_limit: 256m
+
+volumes:
+  nn:
+  dn1:
+  dn2:
+  pg:
+  neo4j:
+  airflow:

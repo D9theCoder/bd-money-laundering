@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AML Investigation</title>
+<script>try{const t=localStorage.getItem('aml-theme');if(t)document.documentElement.dataset.theme=t;}catch(_){}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/ui/aml.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="nav-label">Workspace</div>
+    <a class="nav-item on" href="/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Investigation queue</a>
+    <a class="nav-item" href="/dashboard/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Dashboard</a>
+    <a class="nav-item" href="/docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 8-4 4 4 4M16 8l4 4-4 4M14 4l-4 16"/></svg>API reference</a>
+    <div class="sidebar-foot">
+      <div id="health"><span class="status-dot"></span>Checking connections…</div>
+      <div class="seg" id="theme"><button data-v="">System</button><button data-v="light">Light</button><button data-v="dark">Dark</button></div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="crumbs"><span>Investigation</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg><b>Transaction queue</b></div>
+      <div class="spacer"></div>
+      <select id="selModel" title="Model" style="min-width:250px"></select>
+      <div class="seg" id="selPeriod"><button data-v="test_main" class="on">Main test · Sep 9–10</button><button data-v="test_add">Extra test · Sep 11–18</button></div>
+    </div>
+
+    <div class="content">
+      <div class="page-head">
+        <div>
+          <h1>Transaction queue</h1>
+          <p>Every scored transaction for the selected model and period, alerts and non-alerts, queried live from the PostgreSQL mart. Select a row to trace its money flow in Neo4j. Risk scores rank transactions for review priority; they do not establish that a transaction is suspicious.</p>
+        </div>
+      </div>
+
+      <div class="stats" id="stats">
+        <div class="stat"><div class="l">Matching transactions</div><div class="v" id="sTotal">–</div><div class="h">for current filters</div></div>
+        <div class="stat"><div class="l">Alerts (predicted 1)</div><div class="v risk" id="sAlerts">–</div><div class="h" id="sAlertsH">score ≥ locked threshold</div></div>
+        <div class="stat"><div class="l">Non-alerts (predicted 0)</div><div class="v" id="sClear">–</div><div class="h">below threshold</div></div>
+        <div class="stat"><div class="l">Locked threshold</div><div class="v" id="sThr">–</div><div class="h">max-F1 on validation</div></div>
+      </div>
+
+      <div class="grid split" id="split">
+        <div class="card" id="queueCard">
+          <div class="card-head" style="flex-wrap:wrap">
+            <div class="toolbar">
+              <div class="seg" id="fPred"><button data-v="all" class="on">All</button><button data-v="alert">Alerts</button><button data-v="clear">Non-alerts</button></div>
+              <input id="fAcc" placeholder="Account (bank:account)" style="width:190px" class="mono">
+            </div>
+            <div class="toolbar">
+              <select id="fSort" title="Sort">
+                <option value="score_desc">Highest risk first</option><option value="score_asc">Lowest risk first</option>
+                <option value="amount_desc">Largest amount</option><option value="amount_asc">Smallest amount</option>
+                <option value="time_desc">Newest first</option><option value="time_asc">Oldest first</option>
+              </select>
+              <button class="btn" id="bMore"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filters <span class="kbd" id="nFilters" hidden>0</span></button>
+            </div>
+          </div>
+          <div class="filters" id="more" hidden>
+            <label class="field">Risk score<div class="range"><input id="fMin" type="number" step="0.01" min="0" max="1" placeholder="min"><input id="fMax" type="number" step="0.01" min="0" max="1" placeholder="max"></div></label>
+            <label class="field">Amount paid<div class="range"><input id="fAmin" type="number" min="0" placeholder="min"><input id="fAmax" type="number" min="0" placeholder="max"></div></label>
+            <label class="field">Payment format<select id="fFmt"><option value="">Any</option></select></label>
+            <label class="field">Payment currency<select id="fCcy"><option value="">Any</option></select></label>
+            <label class="field">Review status<select id="fRev"><option value="">Any</option><option value="unreviewed">Not reviewed</option><option value="open">Open</option><option value="in_review">In review</option><option value="escalated">Escalated</option><option value="closed">Closed</option></select></label>
+            <div class="field" style="justify-content:flex-end"><div style="display:flex;gap:6px"><button class="btn primary" id="bApply">Apply</button><button class="btn ghost" id="bReset">Reset</button></div></div>
+          </div>
+          <div class="chips" id="chips"></div>
+          <div class="table-wrap" style="max-height:600px"><table id="tQueue"></table></div>
+          <div class="pager">
+            <span>Rows</span><select id="pSize"><option>25</option><option selected>50</option><option>100</option><option>200</option></select>
+            <span class="grow" id="pInfo"></span>
+            <button class="btn" id="pFirst" title="First page">«</button><button class="btn" id="pPrev">Previous</button>
+            <span>Page <input id="pNum" type="number" min="1" value="1" style="width:64px;height:26px"> <span id="pOf"></span></span>
+            <button class="btn" id="pNext">Next</button>
+          </div>
+        </div>
+
+        <div class="stack">
+          <div class="card">
+            <div class="card-head">
+              <div><h3>Transaction network</h3><div class="sub" id="gSub">Neo4j · read-only</div></div>
+              <div class="toolbar">
+                <label class="field" style="flex-direction:row;align-items:center;gap:6px">±<input id="gHours" type="number" min="1" max="168" value="24" style="width:58px">h</label>
+                <select id="gEdges" title="Max transfers"><option value="20">20 edges</option><option value="40" selected>40 edges</option><option value="80">80 edges</option><option value="150">150 edges</option></select>
+                <div class="seg" id="gHops"><button data-v="1">1 hop</button><button data-v="2" class="on">2 hops</button></div>
+              </div>
+            </div>
+            <div id="graph"></div>
+            <div class="card-foot" id="invNote">Click an account to re-centre the network on it. Hover for details, click an edge to inspect its transfers.</div>
+          </div>
+          <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">
+            <div class="card">
+              <div class="card-head"><h3>Details</h3><span class="sub" id="dSub"></span></div>
+              <div class="card-body" id="detail"><p class="note">No transaction selected.</p></div>
+            </div>
+            <div class="card">
+              <div class="card-head"><h3>Review</h3><span class="sub" id="rSub"></span></div>
+              <div class="card-body stack" style="gap:10px">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                  <label class="field">Status<select id="rStatus"><option value="open">Open</option><option value="in_review">In review</option><option value="escalated">Escalated</option><option value="closed">Closed</option></select></label>
+                  <label class="field">Reviewer<input id="rWho" placeholder="optional"></label>
+                </div>
+                <textarea id="rNote" rows="3" placeholder="Add a note for this transaction…"></textarea>
+                <div style="display:flex;align-items:center;gap:10px"><button class="btn primary" id="bSave">Save review</button><span id="rMsg" class="note"></span></div>
+                <div id="rList"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="footer">Synthetic data from IBM AMLworld (CDLA-Sharing-1.0). This service uses the <span class="mono">analyst</span> database role: evaluation labels are not accessible, and the only write is to <span class="mono">mart.reviews</span>.</div>
+  </div>
+</div>
+
+<script src="/vendor/cytoscape.min.js"></script>
+<script src="/ui/aml-graph.js"></script>
+<script src="/ui/aml-ui.js"></script>
+<script>
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const {esc, cur} = AMLGraph;
+const nf = new Intl.NumberFormat('en-US'), nf2 = new Intl.NumberFormat('en-US', {maximumFractionDigits:2});
+const nf4 = new Intl.NumberFormat('en-US', {minimumFractionDigits:4, maximumFractionDigits:4});
+const STATUS = {unreviewed:'Not reviewed', open:'Open', in_review:'In review', escalated:'Escalated', closed:'Closed'};
+const SORTS = {score:['score_desc','score_asc'], amount:['amount_desc','amount_asc'], time:['time_desc','time_asc']};
+const ts = t => String(t ?? '').replace('T', ' ').slice(0, 16);
+let models = [], rows = [], current = null, page = 1, hasMore = false, total = null, reqId = 0;
+
+const graph = AMLGraph.create($('#graph'), {
+  onEdge: (x, g, auto) => { const e = x.edges.find(y => y.hop === 0) || x.edges[0]; if (!auto) loadDetail(e.id); },
+  onNode: key => loadAccountGraph(key)});
+
+async function api(path, opt){
+  const r = await fetch(path, opt);
+  if (!r.ok){ let m = r.statusText; try{ const j = await r.json(); m = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail); }catch(_){} throw new Error(`${r.status} ${m}`); }
+  return r.json();
+}
+const qs = o => new URLSearchParams(Object.fromEntries(Object.entries(o).filter(([, v]) => v !== '' && v != null))).toString();
+const segVal = id => $(`${id} button.on`).dataset.v;
+function seg(id, fn){ $$(`${id} button`).forEach(b => b.onclick = () => { $$(`${id} button`).forEach(x => x.classList.toggle('on', x === b)); fn(b.dataset.v); }); }
+
+function filters(){
+  return {prediction:segVal('#fPred'), account:$('#fAcc').value.trim(), min_score:$('#fMin').value, max_score:$('#fMax').value,
+    min_amount:$('#fAmin').value, max_amount:$('#fAmax').value, payment_format:$('#fFmt').value, payment_currency:$('#fCcy').value, review_status:$('#fRev').value};
+}
+const base = () => ({model_version:$('#selModel').value, period:segVal('#selPeriod')});
+
+function renderChips(){
+  const f = filters(), chips = [];
+  if (f.account) chips.push(['account', 'Account', f.account]);
+  if (f.min_score || f.max_score) chips.push(['score', 'Score', `${f.min_score || 0} – ${f.max_score || 1}`]);
+  if (f.min_amount || f.max_amount) chips.push(['amount', 'Amount', `${f.min_amount ? nf.format(f.min_amount) : 0} – ${f.max_amount ? nf.format(f.max_amount) : '∞'}`]);
+  if (f.payment_format) chips.push(['fmt', 'Format', f.payment_format]);
+  if (f.payment_currency) chips.push(['ccy', 'Currency', f.payment_currency]);
+  if (f.review_status) chips.push(['rev', 'Review', STATUS[f.review_status]]);
+  $('#chips').innerHTML = chips.map(([k, l, v]) => `<span class="chip"><b>${l}</b>${esc(v)}<button data-k="${k}" title="Remove">✕</button></span>`).join('');
+  const n = chips.filter(c => c[0] !== 'account').length;
+  $('#nFilters').hidden = !n; $('#nFilters').textContent = n;
+}
+$('#chips').onclick = ev => {
+  const k = ev.target.closest('button')?.dataset.k; if (!k) return;
+  ({account:['#fAcc'], score:['#fMin', '#fMax'], amount:['#fAmin', '#fAmax'], fmt:['#fFmt'], ccy:['#fCcy'], rev:['#fRev']})[k].forEach(s => $(s).value = '');
+  reload();
+};
+
+function reload(){ page = 1; renderChips(); loadQueue(true); }
+
+async function loadQueue(withCount){
+  const id = ++reqId, size = +$('#pSize').value;
+  $('#tQueue').classList.add('loading');
+  if (withCount) countQueue(id);
+  try{
+    const r = await api('/api/alerts?' + qs({...base(), ...filters(), sort:$('#fSort').value, page, page_size:size}));
+    if (id !== reqId) return;
+    rows = r.rows; hasMore = r.has_more; renderQueue();
+  }catch(e){ $('#tQueue').innerHTML = `<tbody><tr><td class="empty err">${esc(e.message)}</td></tr></tbody>`; }
+  $('#tQueue').classList.remove('loading');
+}
+async function countQueue(id){
+  total = null; ['#sTotal', '#sAlerts', '#sClear'].forEach(s => $(s).innerHTML = '<span class="spin"></span>'); renderPager();
+  try{
+    const c = await api('/api/alerts/count?' + qs({...base(), ...filters()}));
+    if (id !== reqId) return;
+    total = c.total; $('#sTotal').textContent = nf.format(c.total); $('#sAlerts').textContent = nf.format(c.alerts); $('#sClear').textContent = nf.format(c.total - c.alerts);
+    $('#sAlertsH').textContent = c.total ? `${nf2.format(100 * c.alerts / c.total)}% of matching rows` : 'no matching rows';
+    renderPager();
+  }catch(e){ $('#sTotal').textContent = '–'; }
+}
+function renderPager(){
+  const size = +$('#pSize').value, from = (page - 1) * size + 1, to = from + rows.length - 1, pages = total == null ? null : Math.max(1, Math.ceil(total / size));
+  $('#pInfo').innerHTML = rows.length ? `<b>${nf.format(from)}–${nf.format(to)}</b> of ${total == null ? '<span class="spin"></span>' : nf.format(total)}` : '';
+  $('#pNum').value = page; $('#pOf').textContent = pages ? `of ${nf.format(pages)}` : '';
+  $('#pPrev').disabled = $('#pFirst').disabled = page <= 1; $('#pNext').disabled = !hasMore;
+}
+
+function renderQueue(){
+  const thr = models.find(m => m.model_version === $('#selModel').value)?.threshold ?? 1;
+  const sort = $('#fSort').value, arrow = k => SORTS[k].includes(sort) ? `<span class="arrow">${sort.endsWith('desc') ? '↓' : '↑'}</span>` : '';
+  const offset = (page - 1) * +$('#pSize').value;
+  $('#tQueue').innerHTML = `<thead><tr><th class="num">#</th><th class="num sortable" data-s="score">Risk score${arrow('score')}</th><th>Prediction</th><th class="sortable" data-s="time">Time (UTC)${arrow('time')}</th><th>From</th><th>To</th><th class="num sortable" data-s="amount">Amount paid${arrow('amount')}</th><th>Format</th><th>Review</th></tr></thead><tbody>` +
+    (rows.length ? rows.map((r, i) => `<tr class="click${current?.transaction_id === r.transaction_id ? ' sel' : ''}" data-i="${i}">
+      <td class="num rank">${nf.format(offset + i + 1)}</td>
+      <td class="num"><span class="score${r.risk_score >= thr ? ' hot' : ''}"><span class="bar"><i style="width:${(100 * r.risk_score).toFixed(1)}%"></i></span><span class="val">${nf4.format(r.risk_score)}</span></span></td>
+      <td>${r.predicted_label ? '<span class="badge alert">Alert</span>' : '<span class="badge clear">Clear</span>'}</td>
+      <td class="mono">${esc(ts(r.event_time))}</td><td class="acct">${esc(r.from_account_key)}</td><td class="acct">${esc(r.to_account_key)}</td>
+      <td class="num">${nf2.format(r.amount_paid)} <span class="faint">${esc(cur(r.payment_currency))}</span></td><td>${esc(r.payment_format)}</td>
+      <td><span class="st ${esc(r.review_status ?? 'unreviewed')}"><i></i>${STATUS[r.review_status ?? 'unreviewed']}</span></td></tr>`).join('')
+      : '<tr><td colspan="9" class="empty">No transactions match these filters.</td></tr>') + '</tbody>';
+  $$('#tQueue tbody tr.click').forEach(tr => tr.onclick = () => select(rows[+tr.dataset.i]));
+  $$('#tQueue th.sortable').forEach(th => th.onclick = () => { const [d, a] = SORTS[th.dataset.s]; $('#fSort').value = sort === d ? a : d; reload(); });
+  renderPager();
+}
+
+async function select(r){
+  current = r; $('#rMsg').textContent = '';
+  $$('#tQueue tbody tr').forEach(tr => tr.classList.toggle('sel', rows[+tr.dataset.i] === r));
+  await Promise.all([loadGraph(r.transaction_id), loadDetail(r.transaction_id)]);
+}
+
+const graphParams = () => ({hours:$('#gHours').value, max_edges:$('#gEdges').value, max_hops:segVal('#gHops')});
+function graphNote(g){
+  $('#gSub').textContent = `${g.nodes.length} accounts · ${g.edges.length} transfers${g.truncated ? ' (capped)' : ''}`;
+  $('#invNote').textContent = `Window ${ts(g.window[0])} → ${ts(g.window[1])} UTC (±${g.window_hours} h) · up to ${g.max_edges} transfers · ${g.max_hops} hop${g.max_hops > 1 ? 's' : ''}. Click an account to re-centre on it.`;
+}
+async function loadGraph(tid){
+  $('#gSub').innerHTML = '<span class="spin"></span> Querying Neo4j…';
+  try{ const g = await api(`/api/subgraph/${encodeURIComponent(tid)}?` + qs(graphParams())); graph.draw(g); graphNote(g); }
+  catch(e){ $('#gSub').textContent = e.message; }
+}
+async function loadAccountGraph(key){
+  $('#gSub').innerHTML = '<span class="spin"></span> Querying Neo4j…';
+  const around = current ? current.event_time : new Date().toISOString();
+  try{ const g = await api(`/api/accounts/${encodeURIComponent(key)}/subgraph?` + qs({around, ...graphParams()})); graph.draw(g); graphNote(g); }
+  catch(e){ $('#gSub').textContent = e.message; }
+}
+
+async function loadDetail(tid){
+  try{
+    const d = await api('/api/transactions/' + encodeURIComponent(tid)), t = d.transaction;
+    if (!current || current.transaction_id !== tid) current = {transaction_id:tid, event_time:t.event_time};
+    $('#dSub').textContent = ''; $('#rSub').textContent = tid;
+    const kv = [['Transaction', `<span class="mono">${esc(t.transaction_id)}</span>`], ['Time (UTC)', `<span class="mono">${esc(ts(t.event_time))}</span>`],
+      ['From', `<span class="mono">${esc(t.from_account_key)}</span>`], ['To', `<span class="mono">${esc(t.to_account_key)}</span>`],
+      ['Paid', `${nf2.format(t.amount_paid)} ${esc(cur(t.payment_currency))}`], ['Received', `${nf2.format(t.amount_received)} ${esc(cur(t.receiving_currency))}`], ['Format', esc(t.payment_format)]];
+    $('#detail').innerHTML = `<table class="kv"><tbody>${kv.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('')}</tbody></table>
+      <div class="nav-label" style="padding:14px 0 6px">Scores by model</div>
+      <table class="kv"><tbody>${d.predictions.map(p => `<tr><td>${esc(p.model)}</td><td><span class="score${p.predicted_label ? ' hot' : ''}"><span class="bar"><i style="width:${(100 * p.risk_score).toFixed(1)}%"></i></span><span class="val">${nf4.format(p.risk_score)}</span></span> ${p.predicted_label ? '<span class="badge alert">Alert</span>' : '<span class="badge clear">Clear</span>'}</td></tr>`).join('')}</tbody></table>`;
+    $('#rList').innerHTML = d.reviews.length ? `<table class="kv"><tbody>${d.reviews.map(r => `<tr><td><span class="st ${esc(r.status)}"><i></i>${STATUS[r.status]}</span><div class="faint mono" style="font-size:11px">${esc(ts(r.created_at))} · ${esc(r.reviewer)}</div></td><td style="text-align:left">${esc(r.note) || '<span class="faint">No note</span>'}</td></tr>`).join('')}</tbody></table>` : '<p class="note">No reviews yet.</p>';
+  }catch(e){ $('#detail').innerHTML = `<p class="note err">${esc(e.message)}</p>`; }
+}
+
+async function saveReview(){
+  if (!current){ $('#rMsg').textContent = 'Select a transaction first.'; return; }
+  try{
+    await api('/api/reviews', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({transaction_id:current.transaction_id,
+      model_version:$('#selModel').value, status:$('#rStatus').value, note:$('#rNote').value || null, reviewer:$('#rWho').value || null})});
+    $('#rMsg').textContent = 'Saved.'; $('#rNote').value = '';
+    await loadDetail(current.transaction_id); await loadQueue(false);
+  }catch(e){ $('#rMsg').textContent = e.message; }
+}
+
+function setTheme(v){
+  if (v) document.documentElement.dataset.theme = v; else delete document.documentElement.dataset.theme;
+  try{ localStorage.setItem('aml-theme', v); }catch(_){}
+  $$('#theme button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  graph.restyle();
+}
+
+async function init(){
+  AMLUI.enhanceSelects();
+  let t = ''; try{ t = localStorage.getItem('aml-theme') || ''; }catch(_){}
+  $$('#theme button').forEach(b => { b.classList.toggle('on', b.dataset.v === t); b.onclick = () => setTheme(b.dataset.v); });
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => graph.restyle());
+  api('/api/health').then(() => $('#health').innerHTML = '<span class="status-dot ok"></span>PostgreSQL · Neo4j connected')
+    .catch(e => $('#health').innerHTML = `<span class="status-dot bad"></span>${esc(e.message)}`);
+  const [ms, fc] = await Promise.all([api('/api/models'), api('/api/facets').catch(() => ({payment_format:[], payment_currency:[]}))]);
+  models = ms;
+  ms.forEach(m => $('#selModel').add(new Option(`${m.model} · ${m.algorithm.replace(/_/g, ' ')} · ${m.feature_set} (${m.library})`, m.model_version)));
+  $('#selModel').value = (ms.find(m => m.model === 'M4') || ms[ms.length - 1]).model_version;
+  fc.payment_format.forEach(x => $('#fFmt').add(new Option(x, x))); fc.payment_currency.forEach(x => $('#fCcy').add(new Option(x, x)));
+  const thr = () => $('#sThr').textContent = nf4.format(models.find(m => m.model_version === $('#selModel').value)?.threshold ?? 0);
+  thr();
+  $('#selModel').onchange = () => { thr(); reload(); };
+  seg('#selPeriod', reload); seg('#fPred', reload); seg('#gHops', () => current && loadGraph(current.transaction_id));
+  $('#fSort').onchange = reload; $('#bApply').onclick = reload;
+  $('#bReset').onclick = () => { ['#fMin', '#fMax', '#fAmin', '#fAmax', '#fFmt', '#fCcy', '#fRev', '#fAcc'].forEach(s => $(s).value = ''); reload(); };
+  $('#bMore').onclick = () => $('#more').hidden = !$('#more').hidden;
+  $$('#more input, #fAcc').forEach(i => i.onkeydown = e => { if (e.key === 'Enter') reload(); });
+  $('#fAcc').onchange = reload;
+  $('#pSize').onchange = reload;
+  $('#pPrev').onclick = () => { if (page > 1){ page--; loadQueue(false); } };
+  $('#pFirst').onclick = () => { page = 1; loadQueue(false); };
+  $('#pNext').onclick = () => { if (hasMore){ page++; loadQueue(false); } };
+  $('#pNum').onchange = () => { const size = +$('#pSize').value, max = total == null ? 1e5 : Math.max(1, Math.ceil(total / size)); page = Math.min(max, Math.max(1, +$('#pNum').value || 1)); loadQueue(false); };
+  $('#gHours').onchange = $('#gEdges').onchange = () => current && loadGraph(current.transaction_id);
+  $('#bSave').onclick = saveReview;
+  document.addEventListener('keydown', e => {
+    if (/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName) || !rows.length) return;
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    const i = Math.max(0, rows.indexOf(rows.find(r => r.transaction_id === current?.transaction_id)));
+    const n = current ? Math.min(rows.length - 1, Math.max(0, i + (e.key === 'ArrowDown' ? 1 : -1))) : 0;
+    select(rows[n]); $(`#tQueue tbody tr[data-i="${n}"]`)?.scrollIntoView({block:'nearest'});
+  });
+  renderChips(); loadQueue(true);
+  const tx = new URLSearchParams(location.search).get('tx');
+  if (tx){ current = {transaction_id:tx}; loadDetail(tx).then(() => loadGraph(tx)); }
+}
+init();
+</script>
+</body>
+</html>

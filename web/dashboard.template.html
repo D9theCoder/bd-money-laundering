@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AML Dashboard</title>
+<script>try{const t=localStorage.getItem('aml-theme');if(t)document.documentElement.dataset.theme=t;}catch(_){}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>/*__AMLCSS__*/</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="nav-label">Dashboard</div>
+    <nav id="tabs" style="display:contents">
+      <button class="nav-item on" data-t="sum"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Overview</button>
+      <button class="nav-item" data-t="queue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Transactions</button>
+      <button class="nav-item" data-t="inv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.3 11 15.7 7M8.3 13l7.4 4"/></svg>Investigation</button>
+      <button class="nav-item" data-t="eval"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>Model evaluation</button>
+      <button class="nav-item" data-t="pipe"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>Data &amp; pipeline</button>
+    </nav>
+    <div class="nav-label">Live</div>
+    <a class="nav-item" href="/" id="liveLink"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>Investigation queue</a>
+    <div class="sidebar-foot">
+      <div id="gen"></div>
+      <div class="seg" id="theme"><button data-v="">System</button><button data-v="light">Light</button><button data-v="dark">Dark</button></div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="crumbs"><span>Dashboard</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg><b id="crumb">Overview</b></div>
+      <div class="spacer"></div>
+      <select id="selModel" title="Model" style="min-width:250px"></select>
+      <div class="seg" id="selPeriod"></div>
+    </div>
+
+    <div class="content">
+      <!-- Overview -->
+      <section class="page on" id="sum">
+        <div class="page-head"><div><h1>Overview</h1><p>Alert volume for the selected model and test period. Risk scores rank transactions for review priority; they do not establish that a transaction is suspicious.</p></div></div>
+        <div class="stats" id="kpis"></div>
+        <div class="grid g2">
+          <div class="card"><div class="card-head"><h3>Scored transactions and alerts per day</h3></div><div class="card-body"><div class="chartbox"><canvas id="chDaily"></canvas></div></div></div>
+          <div class="card"><div class="card-head"><h3>Alerts by payment format</h3></div><div class="card-body"><div class="chartbox"><canvas id="chFmt"></canvas></div></div></div>
+        </div>
+        <div class="grid g2" style="margin-top:16px">
+          <div class="card"><div class="card-head"><h3>Alerts by payment currency</h3><span class="sub">Amounts are not summed across currencies</span></div><div class="table-wrap" style="max-height:330px"><table id="tCcy"></table></div></div>
+          <div class="card"><div class="card-head"><h3>Model version</h3></div><div class="card-body" style="padding-top:6px;padding-bottom:6px"><table class="kv" id="tVer"></table></div></div>
+        </div>
+      </section>
+
+      <!-- Transactions -->
+      <section class="page" id="queue">
+        <div class="page-head"><div><h1>Transactions</h1><p id="queueIntro"></p></div></div>
+        <div class="card">
+          <div class="card-head" style="flex-wrap:wrap">
+            <div class="toolbar">
+              <div class="seg" id="fPred"><button data-v="" class="on">All</button><button data-v="1">Alerts</button><button data-v="0">Non-alerts</button></div>
+              <input id="fAcc" placeholder="Search account" style="width:190px" class="mono">
+            </div>
+            <div class="toolbar">
+              <select id="fSrc" title="Snapshot slice"><option value="">All snapshot rows</option><option value="top">Top-ranked</option><option value="near">Near-threshold non-alerts</option><option value="sample">Random non-alerts</option></select>
+              <button class="btn" id="bMore"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filters <span class="kbd" id="nFilters" hidden>0</span></button>
+            </div>
+          </div>
+          <div class="filters" id="more" hidden>
+            <label class="field">Risk score<div class="range"><input id="fMin" type="number" step="0.01" min="0" max="1" placeholder="min"><input id="fMax" type="number" step="0.01" min="0" max="1" placeholder="max"></div></label>
+            <label class="field">Amount paid<div class="range"><input id="fAmin" type="number" min="0" placeholder="min"><input id="fAmax" type="number" min="0" placeholder="max"></div></label>
+            <label class="field">Payment format<select id="fFmt"><option value="">Any</option></select></label>
+            <label class="field">Payment currency<select id="fCcy"><option value="">Any</option></select></label>
+            <label class="field">Review status<select id="fRev"><option value="">Any</option><option value="unreviewed">Not reviewed</option><option value="open">Open</option><option value="in_review">In review</option><option value="escalated">Escalated</option><option value="closed">Closed</option></select></label>
+            <div class="field" style="justify-content:flex-end"><button class="btn ghost" id="bReset">Reset filters</button></div>
+          </div>
+          <div class="chips" id="chips"></div>
+          <div class="table-wrap"><table id="tQueue"></table></div>
+          <div class="pager">
+            <span>Rows</span><select id="pSize"><option>25</option><option selected>50</option><option>100</option></select>
+            <span class="grow" id="pInfo"></span>
+            <button class="btn" id="pPrev">Previous</button>
+            <span>Page <input id="pNum" type="number" min="1" value="1" style="width:60px;height:26px"> <span id="pOf"></span></span>
+            <button class="btn" id="pNext">Next</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Investigation -->
+      <section class="page" id="inv">
+        <div class="page-head"><div><h1>Investigation</h1><p>Money flow around a top-ranked alert, taken from Neo4j when the snapshot was built. Parallel transfers between the same accounts are merged; hover any element for details.</p></div>
+          <select id="selAlert" style="max-width:560px;min-width:320px"></select></div>
+        <div class="grid g-side" style="align-items:start">
+          <div class="card"><div id="graph"></div><div class="card-foot" id="invNote"></div></div>
+          <div class="card"><div class="card-head"><h3 id="invTitle">Details</h3></div><div class="card-body" id="invDetail"></div></div>
+        </div>
+      </section>
+
+      <!-- Evaluation -->
+      <section class="page" id="eval">
+        <div class="page-head"><div><h1>Model evaluation</h1><p>Researcher view. Uses the simulator's evaluation labels; thresholds were chosen on validation data (max F1) and then locked.</p></div>
+          <div class="seg" id="selSplit"><button data-v="val">Validation · Sep 7–8</button><button data-v="test_main" class="on">Main test · Sep 9–10</button><button data-v="test_add">Additional test · Sep 11–18</button></div></div>
+        <div class="card"><div class="table-wrap"><table id="tEval"></table></div></div>
+        <div class="grid g2" style="margin-top:16px">
+          <div class="card"><div class="card-head"><h3>PR-AUC (average precision)</h3><span class="sub" id="lgPr"></span></div><div class="card-body"><div class="chartbox"><canvas id="chPr"></canvas></div></div></div>
+          <div class="card"><div class="card-head"><h3>Training time (seconds)</h3></div><div class="card-body"><div class="chartbox"><canvas id="chFit"></canvas></div></div></div>
+        </div>
+      </section>
+
+      <!-- Pipeline -->
+      <section class="page" id="pipe">
+        <div class="page-head"><div><h1>Data &amp; pipeline</h1><p>Volumes and quality checks from the stage audit records of the active data version.</p></div></div>
+        <div class="grid g2">
+          <div class="card"><div class="card-head"><h3>Transactions per day (full dataset)</h3></div><div class="card-body"><div class="chartbox"><canvas id="chAll"></canvas></div></div></div>
+          <div class="card"><div class="card-head"><h3>ETL checks (active curated version)</h3></div><div class="card-body" style="padding-top:6px;padding-bottom:6px"><table class="kv" id="tEtl"></table></div></div>
+        </div>
+        <div class="grid g2" style="margin-top:16px">
+          <div class="card"><div class="card-head"><h3>Time-based data split</h3></div><table id="tSplit"></table></div>
+          <div class="card"><div class="card-head"><h3>Graph (Neo4j) and data mart</h3></div><div class="card-body" style="padding-top:6px;padding-bottom:6px"><table class="kv" id="tLoad"></table></div></div>
+        </div>
+      </section>
+    </div>
+    <div class="footer" id="foot"></div>
+  </div>
+</div>
+
+<script>/*__CHARTJS__*/</script>
+<script>/*__CYTOSCAPE__*/</script>
+<script>/*__AMLGRAPH__*/</script>
+<script>/*__AMLUI__*/</script>
+<script>
+const D = /*__DATA__*/null;
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const {esc, cur} = AMLGraph;
+const nf = new Intl.NumberFormat('en-US'), nf2 = new Intl.NumberFormat('en-US', {maximumFractionDigits:2});
+const nf4 = new Intl.NumberFormat('en-US', {minimumFractionDigits:4, maximumFractionDigits:4});
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const ts = t => String(t ?? '').replace('T', ' ').slice(0, 16);
+const STATUS = {unreviewed:'Not reviewed', open:'Open', in_review:'In review', escalated:'Escalated', closed:'Closed'};
+const SRC = {top:'Top-ranked', near:'Near threshold', sample:'Random sample'};
+const LIVE = location.protocol.startsWith('http');
+const charts = {};
+const acct = k => (D.accounts || {})[k] || {};
+const who = k => `${acct(k).name ? esc(acct(k).name) + '<div class="faint mono" style="font-size:11px">' + esc(k) + '</div>' : `<span class="mono">${esc(k)}</span>`}`;
+let page = 1, sortKey = 'score', sortDir = -1, filtered = [];
+
+Chart.defaults.font.family = css('--font');
+Chart.defaults.font.size = 11.5;
+function chart(id, cfg){
+  if (charts[id]) charts[id].destroy();
+  const ink = css('--muted'), line = css('--line');
+  const axis = {ticks:{color:ink, padding:8}, grid:{color:line, drawTicks:false}, border:{display:false}};
+  cfg.options = Object.assign({responsive:true, maintainAspectRatio:false, animation:false, layout:{padding:{left:2, right:2}},
+    plugins:{legend:{position:'bottom', align:'start', labels:{color:ink, boxWidth:10, boxHeight:10, useBorderRadius:true, borderRadius:2}},
+      tooltip:{backgroundColor:css('--panel'), titleColor:css('--ink'), bodyColor:css('--ink-2'), borderColor:css('--line-2'), borderWidth:1, padding:10, cornerRadius:8}},
+    scales:{x:{...axis, grid:{display:false}}, y:{...axis, beginAtZero:true}}}, cfg.options || {});
+  charts[id] = new Chart(document.getElementById(id), cfg);
+}
+
+const scored = D.models.filter(m => m.model !== 'M0');
+const modelLabel = m => `${m.model} · ${m.algorithm.replace(/_/g, ' ')} · ${m.feature_set} (${m.library})`;
+const segVal = id => $(`${id} button.on`).dataset.v;
+function seg(id, fn){ $$(`${id} button`).forEach(b => b.onclick = () => { $$(`${id} button`).forEach(x => x.classList.toggle('on', x === b)); fn(b.dataset.v); }); }
+const view = () => D.views[`${$('#selModel').value}|${segVal('#selPeriod')}`];
+const modelOf = mv => D.models.find(m => m.model_version === mv);
+
+const graph = AMLGraph.create($('#graph'), {
+  empty:'No precomputed network for this alert.', accounts:D.accounts || {},
+  onEdge: x => showGroup(x),
+  onNode: (k, g) => {
+    const es = g.edges.filter(e => e.s === k || e.d === k);
+    $('#invTitle').textContent = 'Account';
+    $('#invDetail').innerHTML = `<table class="kv"><tbody><tr><td>Holder</td><td>${esc(acct(k).name ?? '–')}</td></tr><tr><td>Bank</td><td>${esc(acct(k).bank ?? '–')}</td></tr><tr><td>Account</td><td class="mono">${esc(k)}</td></tr><tr><td>Transfers in network</td><td>${es.length}</td></tr>
+      <tr><td>Outgoing</td><td>${es.filter(e => e.s === k).length}</td></tr><tr><td>Incoming</td><td>${es.filter(e => e.d === k).length}</td></tr></tbody></table>
+      ${LIVE ? `<p class="note" style="margin-top:12px"><a href="/" target="_blank">Open the live queue</a> to re-centre the network on this account.</p>` : ''}`;
+  }});
+
+function init(){
+  AMLUI.enhanceSelects();
+  const m0 = D.models[0] || {};
+  $('#gen').innerHTML = `<div>Snapshot ${esc(ts(D.generated_at))} UTC</div><div class="faint mono" style="font-size:10.5px">${esc(m0.source_version ?? '')} · ${esc(m0.feature_version ?? '')}</div>`;
+  $('#foot').textContent = 'Synthetic data from IBM AMLworld (CDLA-Sharing-1.0). Risk scores rank transactions for review priority; they do not establish that a transaction is suspicious.';
+  if (!LIVE) $('#liveLink').style.display = 'none';
+  scored.forEach(m => $('#selModel').add(new Option(modelLabel(m), m.model_version)));
+  $('#selModel').value = (scored.find(m => m.model === 'M4') || scored[scored.length - 1]).model_version;
+  $('#selPeriod').innerHTML = Object.entries(D.periods).map(([k, v], i) => `<button data-v="${k}"${i ? '' : ' class="on"'}>${esc(v.replace(', 2022', ''))}</button>`).join('');
+  $$('#tabs button').forEach(b => b.onclick = () => tab(b.dataset.t));
+  $('#selModel').onchange = render; seg('#selPeriod', render);
+  seg('#fPred', resetPage); seg('#selSplit', renderEval);
+  ['#fAcc', '#fMin', '#fMax', '#fAmin', '#fAmax'].forEach(s => $(s).oninput = resetPage);
+  ['#fFmt', '#fCcy', '#fRev', '#fSrc'].forEach(s => $(s).onchange = resetPage);
+  $('#bMore').onclick = () => $('#more').hidden = !$('#more').hidden;
+  $('#bReset').onclick = () => { ['#fAcc', '#fMin', '#fMax', '#fAmin', '#fAmax', '#fFmt', '#fCcy', '#fRev', '#fSrc'].forEach(s => $(s).value = ''); resetPage(); };
+  $('#chips').onclick = ev => { const k = ev.target.closest('button')?.dataset.k; if (!k) return; k.split(',').forEach(s => $(s).value = ''); resetPage(); };
+  $('#pSize').onchange = resetPage;
+  $('#pPrev').onclick = () => { page--; renderQueue(); };
+  $('#pNext').onclick = () => { page++; renderQueue(); };
+  $('#pNum').onchange = () => { page = +$('#pNum').value || 1; renderQueue(); };
+  $('#selAlert').onchange = () => drawGraph($('#selAlert').value);
+  let t = ''; try{ t = localStorage.getItem('aml-theme') || ''; }catch(_){}
+  $$('#theme button').forEach(b => { b.classList.toggle('on', b.dataset.v === t); b.onclick = () => setTheme(b.dataset.v); });
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', rerender);
+  const h = new URLSearchParams(location.search).get('tab') || location.hash.slice(1); render(); renderEval(); renderPipe(); if (h && $('#' + h)) tab(h);
+}
+function setTheme(v){
+  if (v) document.documentElement.dataset.theme = v; else delete document.documentElement.dataset.theme;
+  try{ localStorage.setItem('aml-theme', v); }catch(_){}
+  $$('#theme button').forEach(b => b.classList.toggle('on', b.dataset.v === v)); rerender();
+}
+function rerender(){ render(); renderEval(); renderPipe(); graph.restyle(); }
+function tab(t){
+  $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+  $$('.content > section').forEach(s => s.classList.toggle('on', s.id === t));
+  $('#crumb').textContent = $(`#tabs button[data-t="${t}"]`).textContent;
+  history.replaceState(null, '', '#' + t);
+  if (t === 'inv') requestAnimationFrame(() => graph.resize());
+}
+
+function render(){
+  const v = view(), m = modelOf($('#selModel').value), k = v.kpi;
+  const stat = (l, val, h, cls = '') => `<div class="stat"><div class="l">${l}</div><div class="v ${cls}">${val}</div><div class="h">${h}</div></div>`;
+  $('#kpis').innerHTML = stat('Scored transactions', nf.format(k.scored), 'in this period') + stat('Alerts (predicted 1)', nf.format(k.alerts), `${nf2.format(k.scored ? 100 * k.alerts / k.scored : 0)}% of scored`, 'risk') +
+    stat('Non-alerts (predicted 0)', nf.format(k.scored - k.alerts), 'below threshold') + stat('Locked threshold', nf4.format(m.threshold), 'max-F1 on validation') + stat('Review capacity K', nf.format(D.precision_at_k), 'for precision@K');
+  chart('chDaily', {type:'bar', data:{labels:v.daily.map(r => r.d), datasets:[
+    {label:'Scored', data:v.daily.map(r => r.scored), backgroundColor:css('--line-2'), borderRadius:4, yAxisID:'y', order:2},
+    {label:'Alerts', data:v.daily.map(r => r.alerts), type:'line', borderColor:css('--risk'), backgroundColor:css('--risk'), pointRadius:3, borderWidth:2, yAxisID:'y1', tension:.25, order:1}]},
+    options:{scales:{y1:{position:'right', beginAtZero:true, ticks:{color:css('--risk')}, grid:{display:false}, border:{display:false}}}}});
+  chart('chFmt', {type:'bar', data:{labels:v.by_format.map(r => r.k), datasets:[{label:'Alerts', data:v.by_format.map(r => r.alerts), backgroundColor:css('--risk'), borderRadius:4, barThickness:14}]},
+    options:{indexAxis:'y', plugins:{legend:{display:false}}, scales:{x:{grid:{color:css('--line')}, ticks:{color:css('--muted')}, border:{display:false}}, y:{grid:{display:false}, ticks:{color:css('--ink-2')}, border:{display:false}}}}});
+  const maxA = Math.max(1, ...v.by_currency.map(r => r.alerts));
+  $('#tCcy').innerHTML = `<thead><tr><th>Currency</th><th class="num">Alerts</th><th></th><th class="num">Amount paid</th></tr></thead><tbody>` +
+    (v.by_currency.length ? v.by_currency.map(r => `<tr><td>${esc(r.k)}</td><td class="num">${nf.format(r.alerts)}</td><td style="width:30%"><span class="score hot" style="width:100%"><span class="bar" style="width:100%"><i style="width:${100 * r.alerts / maxA}%"></i></span></span></td><td class="num">${nf2.format(r.amount)} <span class="faint">${esc(cur(r.k))}</span></td></tr>`).join('')
+      : `<tr><td colspan="4" class="empty">No alerts at this threshold.</td></tr>`) + `</tbody>`;
+  $('#tVer').innerHTML = `<tbody>${[['Model version', m.model_version], ['Algorithm', m.algorithm], ['Library', m.library], ['Feature set', m.feature_set],
+    ['Feature version', m.feature_version], ['Source version', m.source_version], ['MLflow run', m.run_id], ['Registry', `${m.registered_model ?? '–'} v${m.registered_version ?? '–'}`]]
+    .map(([a, b]) => `<tr><td>${a}</td><td class="mono">${esc(b)}</td></tr>`).join('')}</tbody>`;
+  const rows = v.rows, nTop = rows.filter(r => r.src === 'top').length;
+  $('#queueIntro').innerHTML = `Snapshot of <b>${nf.format(rows.length)}</b> scored transactions for this model and period: the ${nf.format(nTop)} highest-ranked, plus non-alerts closest to the threshold and a reproducible random sample of non-alerts.${LIVE ? ' The <a href="/">live queue</a> pages through every scored transaction.' : ''}`;
+  for (const [sel, key] of [['#fFmt', 'payment_format'], ['#fCcy', 'payment_currency']]){
+    const vals = [...new Set(rows.map(r => r[key]))].sort(), keep = $(sel).value;
+    $(sel).length = 1; vals.forEach(x => $(sel).add(new Option(x, x))); $(sel).value = vals.includes(keep) ? keep : '';
+  }
+  resetPage(); fillAlerts();
+}
+
+function chips(){
+  const c = [], g = s => $(s).value;
+  if (g('#fAcc')) c.push(['#fAcc', 'Account', g('#fAcc')]);
+  if (g('#fMin') || g('#fMax')) c.push(['#fMin,#fMax', 'Score', `${g('#fMin') || 0} – ${g('#fMax') || 1}`]);
+  if (g('#fAmin') || g('#fAmax')) c.push(['#fAmin,#fAmax', 'Amount', `${g('#fAmin') || 0} – ${g('#fAmax') || '∞'}`]);
+  if (g('#fFmt')) c.push(['#fFmt', 'Format', g('#fFmt')]);
+  if (g('#fCcy')) c.push(['#fCcy', 'Currency', g('#fCcy')]);
+  if (g('#fRev')) c.push(['#fRev', 'Review', STATUS[g('#fRev')]]);
+  if (g('#fSrc')) c.push(['#fSrc', 'Slice', SRC[g('#fSrc')]]);
+  $('#chips').innerHTML = c.map(([k, l, v]) => `<span class="chip"><b>${l}</b>${esc(v)}<button data-k="${k}" title="Remove">✕</button></span>`).join('');
+  const n = c.filter(x => !['#fAcc', '#fSrc'].includes(x[0])).length; $('#nFilters').hidden = !n; $('#nFilters').textContent = n;
+}
+function resetPage(){ page = 1; renderQueue(); }
+function renderQueue(){
+  chips();
+  const v = view(), thr = modelOf($('#selModel').value).threshold, num = s => $(s).value === '' ? null : +$(s).value;
+  const pred = segVal('#fPred'), acc = $('#fAcc').value.trim().toLowerCase(), fmt = $('#fFmt').value, ccy = $('#fCcy').value, rev = $('#fRev').value, src = $('#fSrc').value;
+  const [mn, mx, amn, amx] = ['#fMin', '#fMax', '#fAmin', '#fAmax'].map(num);
+  const rank = new Map(v.rows.map((r, i) => [r.transaction_id, i + 1]));
+  filtered = v.rows.filter(r => (pred === '' || r.predicted_label === +pred) && (!fmt || r.payment_format === fmt) && (!ccy || r.payment_currency === ccy)
+    && (!src || r.src === src) && (mn == null || r.risk_score >= mn) && (mx == null || r.risk_score <= mx)
+    && (amn == null || r.amount_paid >= amn) && (amx == null || r.amount_paid <= amx) && (!rev || (r.review_status ?? 'unreviewed') === rev)
+    && (!acc || r.from_account_key.toLowerCase().includes(acc) || r.to_account_key.toLowerCase().includes(acc)));
+  const keyFn = {score:r => r.risk_score, time:r => String(r.event_time), amount:r => r.amount_paid}[sortKey];
+  filtered.sort((a, b) => (keyFn(a) < keyFn(b) ? -1 : keyFn(a) > keyFn(b) ? 1 : 0) * sortDir || a.transaction_id.localeCompare(b.transaction_id));
+  const size = +$('#pSize').value, pages = Math.max(1, Math.ceil(filtered.length / size));
+  page = Math.min(Math.max(1, page), pages);
+  const slice = filtered.slice((page - 1) * size, page * size);
+  const arrow = k => sortKey === k ? `<span class="arrow">${sortDir < 0 ? '↓' : '↑'}</span>` : '';
+  $('#tQueue').innerHTML = `<thead><tr><th class="num">Rank</th><th class="num sortable" data-s="score">Risk score${arrow('score')}</th><th>Prediction</th><th class="sortable" data-s="time">Time (UTC)${arrow('time')}</th><th>From</th><th>To</th><th class="num sortable" data-s="amount">Amount paid${arrow('amount')}</th><th>Format</th><th>Slice</th><th>Review</th></tr></thead><tbody>` +
+    (slice.length ? slice.map(r => `<tr class="click" data-id="${esc(r.transaction_id)}"><td class="num rank">${nf.format(rank.get(r.transaction_id))}</td>
+      <td class="num"><span class="score${r.risk_score >= thr ? ' hot' : ''}"><span class="bar"><i style="width:${(100 * r.risk_score).toFixed(1)}%"></i></span><span class="val">${nf4.format(r.risk_score)}</span></span></td>
+      <td>${r.predicted_label ? '<span class="badge alert">Alert</span>' : '<span class="badge clear">Clear</span>'}</td><td class="mono">${esc(ts(r.event_time))}</td>
+      <td class="acct">${esc(r.from_account_key)}</td><td class="acct">${esc(r.to_account_key)}</td>
+      <td class="num">${nf2.format(r.amount_paid)} <span class="faint">${esc(cur(r.payment_currency))}</span></td><td>${esc(r.payment_format)}</td>
+      <td class="faint">${SRC[r.src]}</td><td><span class="st ${esc(r.review_status ?? 'unreviewed')}"><i></i>${STATUS[r.review_status ?? 'unreviewed']}</span></td></tr>`).join('')
+      : '<tr><td colspan="10" class="empty">No transactions match these filters.</td></tr>') + '</tbody>';
+  $$('#tQueue th.sortable').forEach(th => th.onclick = () => { if (sortKey === th.dataset.s) sortDir = -sortDir; else { sortKey = th.dataset.s; sortDir = -1; } renderQueue(); });
+  $$('#tQueue tr.click').forEach(tr => tr.onclick = () => openTx(tr.dataset.id));
+  const from = filtered.length ? (page - 1) * size + 1 : 0;
+  $('#pInfo').innerHTML = `<b>${nf.format(from)}–${nf.format(from + slice.length - (slice.length ? 1 : 0))}</b> of ${nf.format(filtered.length)}${filtered.length !== v.rows.length ? ` <span class="faint">(filtered from ${nf.format(v.rows.length)})</span>` : ''}`;
+  $('#pNum').value = page; $('#pNum').max = pages; $('#pOf').textContent = `of ${nf.format(pages)}`;
+  $('#pPrev').disabled = page <= 1; $('#pNext').disabled = page >= pages;
+}
+function openTx(id){
+  if (D.subgraphs[id]){ $('#selAlert').value = id; drawGraph(id); tab('inv'); }
+  else if (LIVE) window.open('/?tx=' + encodeURIComponent(id), '_blank');
+  else alert(`Networks are precomputed only for the top ${D.config.subgraph_alerts_per_view} alerts. Open the live queue for other transactions.`);
+}
+
+function fillAlerts(){
+  const v = view(), sel = $('#selAlert'), keep = sel.value; sel.length = 0;
+  v.rows.filter(r => r.src === 'top' && D.subgraphs[r.transaction_id]).slice(0, D.config.subgraph_alerts_per_view).forEach((r, i) =>
+    sel.add(new Option(`#${i + 1} · ${nf4.format(r.risk_score)} · ${r.from_account_key} → ${r.to_account_key} · ${ts(r.event_time)}`, r.transaction_id)));
+  if ([...sel.options].some(o => o.value === keep)) sel.value = keep;
+  if (sel.length) drawGraph(sel.value);
+}
+function drawGraph(tid){
+  const g = D.subgraphs[tid]; if (!g) return;
+  graph.draw(g);
+  $('#invNote').textContent = `${g.nodes.length} accounts · ${g.edges.length} transfers${g.truncated ? ' (capped)' : ''} · window ${ts(g.window[0])} → ${ts(g.window[1])} UTC (±${g.window_hours} h) · up to ${g.max_hops} hops. Evaluation labels are not shown here.`;
+}
+function showGroup(x){
+  $('#invTitle').textContent = x.edges.length > 1 ? `${x.edges.length} transfers` : 'Transfer';
+  const own = x.edges.find(e => e.hop === 0);
+  $('#invDetail').innerHTML = `<table class="kv"><tbody><tr><td>From</td><td>${who(x.s)}</td></tr><tr><td>To</td><td>${who(x.d)}</td></tr>
+    <tr><td>Hop</td><td>${x.hop === 0 ? '<span class="badge alert">Selected alert</span>' : x.hop}</td></tr>
+    ${Object.entries(x.sums).map(([c, s]) => `<tr><td>Total ${esc(cur(c))}</td><td>${nf2.format(s)}</td></tr>`).join('')}</tbody></table>
+    <div class="nav-label" style="padding:14px 0 6px">Transfers</div>
+    <table class="kv"><tbody>${x.edges.map(e => `<tr><td class="mono" style="font-size:11px">${esc(ts(e.ts))}${e === own ? ' <span class="badge alert plain">alert</span>' : ''}<div class="faint">${esc(e.fmt)} · ${esc(e.id)}</div></td><td>${nf2.format(e.amount)} ${esc(cur(e.cur))}</td></tr>`).join('')}</tbody></table>`;
+}
+
+function renderEval(){
+  const split = segVal('#selSplit'), K = D.precision_at_k, f = x => x == null ? '–' : nf4.format(x);
+  const rows = D.metrics.filter(r => r.split === split).map(r => ({...JSON.parse(r.metrics_json), model:r.model, meta:modelOf(r.model_version)}));
+  const best = Math.max(...rows.map(r => r.pr_auc ?? 0));
+  $('#tEval').innerHTML = `<thead><tr><th>Model</th><th>Library</th><th class="num">PR-AUC</th><th class="num">ROC-AUC</th><th class="num">Precision</th><th class="num">Recall</th><th class="num">F1</th><th class="num">Accuracy</th><th class="num">P@${K}</th><th class="num">TP</th><th class="num">FP</th><th class="num">FN</th><th class="num">TN</th><th class="num">Threshold</th><th class="num">Fit (s)</th><th class="num">Peak RSS (MB)</th></tr></thead><tbody>` +
+    rows.map(r => `<tr><td><b style="color:var(--ink)">${r.model}</b> <span class="faint">${esc(r.meta?.algorithm?.replace(/_/g, ' ') ?? '')} · ${esc(r.meta?.feature_set ?? '')}</span></td><td>${esc(r.meta?.library ?? '')}</td>
+      <td class="num"${r.pr_auc === best ? ' style="color:var(--ink);font-weight:600"' : ''}>${f(r.pr_auc)}</td><td class="num">${f(r.roc_auc)}</td><td class="num">${f(r.precision)}</td><td class="num">${f(r.recall)}</td><td class="num">${f(r.f1)}</td><td class="num">${f(r.accuracy)}</td><td class="num">${f(r['precision_at_' + K])}</td>
+      <td class="num">${nf.format(r.tp)}</td><td class="num">${nf.format(r.fp)}</td><td class="num">${nf.format(r.fn)}</td><td class="num">${nf.format(r.tn)}</td><td class="num">${f(r.threshold)}</td><td class="num">${r.meta?.fit_seconds ?? '–'}</td><td class="num">${r.meta?.peak_rss_mb ?? '–'}</td></tr>`).join('') + `</tbody>`;
+  const col = lib => lib === 'xgboost' ? css('--risk') : css('--brand');
+  $('#lgPr').innerHTML = `<span style="color:var(--brand)">■</span> Spark MLlib` + (D.models.some(m => m.library === 'xgboost') ? ` &nbsp; <span style="color:var(--risk)">■</span> XGBoost` : '');
+  chart('chPr', {type:'bar', data:{labels:rows.map(r => r.model), datasets:[{label:'PR-AUC', data:rows.map(r => r.pr_auc), backgroundColor:rows.map(r => col(r.meta?.library)), borderRadius:4, maxBarThickness:42}]}, options:{plugins:{legend:{display:false}}}});
+  const fit = D.models.filter(m => m.fit_seconds != null);
+  chart('chFit', {type:'bar', data:{labels:fit.map(m => m.model), datasets:[{label:'seconds', data:fit.map(m => m.fit_seconds), backgroundColor:fit.map(m => col(m.library)), borderRadius:4, maxBarThickness:42}]}, options:{plugins:{legend:{display:false}}}});
+}
+
+function renderPipe(){
+  const o = D.overview;
+  chart('chAll', {type:'bar', data:{labels:o.daily.map(r => r.d), datasets:[{label:'Transactions', data:o.daily.map(r => r.n), backgroundColor:css('--brand'), borderRadius:3}]}, options:{plugins:{legend:{display:false}}}});
+  const e = D.pipeline.etl || {};
+  const kv = rows => `<tbody>${rows.map(([a, b]) => `<tr><td>${a}</td><td class="num">${typeof b === 'number' ? nf.format(b) : esc(b ?? '–')}</td></tr>`).join('')}</tbody>`;
+  const ok = e.checks ? Object.values(e.checks).every(Boolean) : null;
+  $('#tEtl').innerHTML = kv([['Source transactions', e.transactions_source], ['Accepted transactions', e.transactions_accepted], ['Quarantined', e.transactions_quarantined],
+    ['Label 0 / label 1', `${nf.format(e.label_0)} / ${nf.format(e.label_1)}`], ['Account metadata rows', e.metadata_rows], ['Active account nodes', e.active_account_nodes],
+    ['Transaction edges', e.edges], ['Self-loops', e.self_loops], ['Inactive metadata accounts', e.inactive_metadata_accounts],
+    ['Active accounts matched to metadata', (e.active_accounts_matched_to_metadata_pct ?? '–') + ' %'], ['Amount type', e.decimal_profile?.chosen ?? '–']]) +
+    `<tbody><tr><td>All checks passed</td><td class="num">${ok == null ? '–' : ok ? '<span class="badge clear">Yes</span>' : '<span class="badge alert">No</span>'}</td></tr></tbody>`;
+  const fs = (D.pipeline.features || {}).split_counts || {};
+  const SPLIT = {train:'Train · Sep 1–6', val:'Validation · Sep 7–8', test_main:'Main test · Sep 9–10', test_add:'Additional test · Sep 11–18'};
+  $('#tSplit').innerHTML = `<thead><tr><th>Split</th><th class="num">Transactions</th><th class="num">Positives</th><th class="num">Positive rate</th></tr></thead><tbody>` +
+    Object.keys(SPLIT).filter(s => fs[s]).map(s => `<tr><td>${SPLIT[s]}</td><td class="num">${nf.format(fs[s].rows)}</td><td class="num">${nf.format(fs[s].positives)}</td><td class="num">${nf4.format(100 * fs[s].positives / fs[s].rows)} %</td></tr>`).join('') + `</tbody>`;
+  const n = D.pipeline.neo4j || {}, p = D.pipeline.publish_mart || {};
+  $('#tLoad').innerHTML = kv([['Account nodes', n.accounts], ['TRANSFER relationships', n.transfers], ['AT_BANK relationships', n.at_bank],
+    ['Graph reconciliation', n.reconciled === undefined ? '–' : (n.reconciled ? 'Matched' : 'Mismatch')], ['Fact rows in mart', p.fact_rows], ['Mart published at', p.published_at]]);
+}
+init();
+</script>
+</body>
+</html>

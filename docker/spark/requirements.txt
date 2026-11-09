@@ -1,0 +1,11 @@
+numpy==2.2.6
+pandas==2.3.3
+pyarrow==25.0.1
+scikit-learn==1.7.2
+xgboost==3.2.0
+mlflow==3.17.2
+psycopg2-binary==2.9.13
+neo4j==5.28.8
+requests==2.34.2
+pyyaml==6.0.3
+psutil==7.2.2

@@ -1,0 +1,30 @@
+# secrets
+stack.env
+
+# data and generated output
+data/
+logs/
+dashboard/index.html
+__pycache__/
+*.pyc
+
+# documents and binaries stay out of this repo (README.md is the only document)
+*.docx
+*.pptx
+*.pdf
+*.drawio
+*.bkp
+*.png
+checkpoints/
+figures/
+markdown/
+~$*
+.~lock.*
+
+# editor / OS
+.vscode/
+.idea/
+Thumbs.db
+
+# local tooling (Playwright venv and browsers)
+tools/
