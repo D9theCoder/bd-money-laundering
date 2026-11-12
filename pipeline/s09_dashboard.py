@@ -1,7 +1,8 @@
 """Stage 4b: static HTML dashboard (stands in for Power BI in this run).
 Reads the published data mart (PostgreSQL) and investigation subgraphs (Neo4j, Cypher) and writes one
 self-contained HTML file (Chart.js and Cytoscape.js inlined) to /opt/aml/dashboard/index.html.
-Labels are used only for the researcher page (aggregated metrics); alert and graph views carry no labels."""
+Labels are used only in aggregate (Insights and researcher pages); alert and graph views carry no labels."""
+import csv
 import glob
 import json
 import os
@@ -18,6 +19,7 @@ L = log("dashboard")
 DC = CFG["dashboard"]
 OUT = "/opt/aml/dashboard/index.html"
 WEB = "/opt/aml/web"
+GRAPH_DIR = "/opt/aml/logs/graph"
 PERIOD_LABEL = {"test_main": "Main test · Sep 9–10, 2022", "test_add": "Additional test · Sep 11–18, 2022"}
 ROW_SQL = ("SELECT p.transaction_id, p.risk_score, p.predicted_label, f.event_time, f.from_account_key, f.to_account_key, "
            "f.from_bank, f.to_bank, f.amount_paid, f.payment_currency, f.amount_received, f.receiving_currency, f.payment_format, "
@@ -81,6 +83,76 @@ def subgraph(sess, alert):
             "truncated": truncated, "nodes": nodes, "edges": list(edges.values())}
 
 
+def graph_insights(top_n=8, curve_n=100):
+    """Aggregates from the graph analytics stage for the Insights page. Only counts and rates leave this function,
+    never account keys or labels of single transfers."""
+    path = os.path.join(GRAPH_DIR, "graph_analytics.json")
+    if not os.path.exists(path):
+        L.warning("no graph analytics output at %s, Insights page will omit the graph section", path)
+        return None
+    g = json.load(open(path, encoding="utf-8"))
+    with open(os.path.join(GRAPH_DIR, "communities.csv"), encoding="utf-8") as f:
+        comms = [{"community": r["community"], "size": int(r["size"]), "transfers": int(r["incident_transfers"]),
+                  "laundering": int(r["laundering"])} for r in csv.DictReader(f)]
+    comms.sort(key=lambda c: (-c["laundering"], c["community"]))
+    # A transfer between two communities is counted in both, so these totals exceed the transfer count. The
+    # baseline is the rate a community would have if labelled transfers were spread in proportion to its traffic.
+    total_l = sum(c["laundering"] for c in comms)
+    total_t = sum(c["transfers"] for c in comms)
+    baseline = 1000 * total_l / total_t if total_t else None
+    curve, run = [], 0
+    for c in comms[:curve_n]:
+        run += c["laundering"]
+        curve.append(run / total_l if total_l else 0)
+    reach = lambda share: next((i + 1 for i, v in enumerate(curve) if v >= share), None)
+    scope = g["transfer_scope"]
+    return {"communities": g["louvain"]["communities"], "modularity": g["louvain"]["modularity"],
+            "with_laundering": sum(1 for c in comms if c["laundering"] > 0),
+            "cross_share_all": 1 - scope["intra_share"], "cross_share_laundering": 1 - scope["laundering_intra_share"],
+            "transfers": scope["non_self_loop_transfers"], "laundering_transfers": scope["laundering_non_self_loop"],
+            "baseline_per_1000": baseline, "curve": curve, "reach_50": reach(0.5), "reach_80": reach(0.8),
+            "top": [{**c, "per_1000": 1000 * c["laundering"] / c["transfers"]} for c in comms[:top_n]]}
+
+
+TIER_SQL = """
+WITH known AS (
+    SELECT f.from_account_key AS k FROM mart.fact_transaction f JOIN restricted.eval_labels l USING (transaction_id)
+     WHERE f.period IN ('train', 'val') AND l.is_laundering = 1
+    UNION
+    SELECT f.to_account_key FROM mart.fact_transaction f JOIN restricted.eval_labels l USING (transaction_id)
+     WHERE f.period IN ('train', 'val') AND l.is_laundering = 1),
+hop AS (
+    (SELECT f.to_account_key AS k FROM mart.fact_transaction f JOIN known ON known.k = f.from_account_key
+      WHERE f.period IN ('train', 'val') AND f.from_account_key <> f.to_account_key
+     UNION
+     SELECT f.from_account_key FROM mart.fact_transaction f JOIN known ON known.k = f.to_account_key
+      WHERE f.period IN ('train', 'val') AND f.from_account_key <> f.to_account_key)
+    EXCEPT SELECT k FROM known)
+SELECT CASE WHEN kf.k IS NOT NULL OR kt.k IS NOT NULL THEN 'known'
+            WHEN hf.k IS NOT NULL OR ht.k IS NOT NULL THEN 'hop' ELSE 'other' END AS tier,
+       f.payment_format = 'ACH' AS ach, count(*) AS n, sum(l.is_laundering) AS pos,
+       sum(p.predicted_label) AS alerts, sum(p.predicted_label * l.is_laundering) AS tp
+  FROM mart.fact_transaction f
+  JOIN restricted.eval_labels l USING (transaction_id)
+  LEFT JOIN mart.predictions p ON p.transaction_id = f.transaction_id AND p.model_version = %s AND p.period = 'test_main'
+  LEFT JOIN known kf ON kf.k = f.from_account_key LEFT JOIN known kt ON kt.k = f.to_account_key
+  LEFT JOIN hop hf ON hf.k = f.from_account_key LEFT JOIN hop ht ON ht.k = f.to_account_key
+ WHERE f.period = 'test_main'
+ GROUP BY 1, 2 ORDER BY 1, 2"""
+
+
+def ops_insights(cur, model_version):
+    """Label-based aggregates for Insights 4 and 5 on the main test period: payment format, and transactions that
+    touch an account seen in a label-1 transaction during train/val ("known") or one transfer away from one ("hop").
+    Only counts leave this function."""
+    by_format = q(cur, "SELECT f.payment_format AS k, count(*) AS n, sum(l.is_laundering) AS pos, "
+                       "sum(p.predicted_label) AS alerts, sum(p.predicted_label * l.is_laundering) AS tp "
+                       "FROM mart.fact_transaction f JOIN restricted.eval_labels l USING (transaction_id) "
+                       "LEFT JOIN mart.predictions p ON p.transaction_id = f.transaction_id AND p.model_version = %s "
+                       "AND p.period = 'test_main' WHERE f.period = 'test_main' GROUP BY 1 ORDER BY 3 DESC, 1", (model_version,))
+    return {"model_version": model_version, "by_format": by_format, "tiers": q(cur, TIER_SQL, (model_version,))}
+
+
 def main():
     conn = psycopg2.connect(host="postgres", dbname="aml", user="aml", password=os.environ["AML_DB_PASSWORD"])
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -129,7 +201,10 @@ def main():
         "by_currency": q(cur, "SELECT payment_currency AS k, sum(tx_count) AS n, sum(amount_paid_sum) AS amount "
                               "FROM mart.agg_daily GROUP BY 1 ORDER BY 2 DESC"),
     }
-    data["metrics"] = q(cur, "SELECT model, split, model_version, metrics_json FROM restricted.eval_metrics ORDER BY model, split")
+    data["graph"] = graph_insights()
+    m4 = next((m for m in scored if m["model"] == "M4"), None)
+    data["ops"] = ops_insights(cur, m4["model_version"]) if m4 else None
+    data["metrics"] = q(cur,"SELECT model, split, model_version, metrics_json FROM restricted.eval_metrics ORDER BY model, split")
     data["pipeline"] = {r["stage"]: json.loads(r["audit_json"]) for r in q(cur, "SELECT stage, audit_json FROM mart.pipeline_runs")}
     # Audit files are named <batch_id>_<stage>.json and batch_id itself contains one underscore, hence split("_", 2).
     # If audit files of several batches exist, the one globbed last overwrites the others.

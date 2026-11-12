@@ -8,13 +8,28 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>/*__AMLCSS__*/</style>
+<style>
+.ins-list{display:grid;gap:16px}
+.ins-body{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:20px;padding:16px 18px 18px}
+.ins-charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:16px}
+.ino{display:inline-grid;place-items:center;width:22px;height:22px;margin-right:10px;border-radius:6px;background:var(--brand-soft);color:var(--brand);font-size:12px;font-weight:600}
+.ins-text .big{font-size:26px;font-weight:600;letter-spacing:-.025em;line-height:1.15;font-variant-numeric:tabular-nums}
+.ins-text .big small{font-size:13px;font-weight:500;color:var(--muted);letter-spacing:0}
+.ins-text p{margin:10px 0 0;color:var(--ink-2)}
+.ins-text .so{margin-top:14px;padding:10px 12px;border-left:3px solid var(--brand);background:var(--brand-soft);border-radius:0 8px 8px 0;color:var(--ink)}
+.ins-text .so b{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--brand);margin-bottom:3px}
+.ins-text table{margin-top:12px}
+@media (max-width:900px){.ins-body{grid-template-columns:1fr}}
+.on-ins .topbar > :not(.crumbs):not(.spacer){visibility:hidden}
+</style>
 </head>
 <body>
 <div class="app">
   <aside class="sidebar">
     <div class="nav-label">Dashboard</div>
     <nav id="tabs" style="display:contents">
-      <button class="nav-item on" data-t="sum"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Overview</button>
+      <button class="nav-item on" data-t="ins"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>Insights</button>
+      <button class="nav-item" data-t="sum"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Overview</button>
       <button class="nav-item" data-t="queue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Transactions</button>
       <button class="nav-item" data-t="inv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.3 11 15.7 7M8.3 13l7.4 4"/></svg>Investigation</button>
       <button class="nav-item" data-t="eval"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>Model evaluation</button>
@@ -37,8 +52,25 @@
     </div>
 
     <div class="content">
+      <!-- Insights -->
+      <section class="page on" id="ins">
+        <div class="page-head"><div><h1>Key insights</h1><p>Summary for decision makers. Model results come from the main test period (Sep 9–10, 2022) with thresholds locked on validation data; graph results cover the whole period. Both use the simulator's labels in aggregate and describe associations, not causes.</p></div></div>
+        <div class="ins-list">
+          <div class="card"><div class="card-head"><h3><span class="ino">1</span>The top of the M4 ranking is where the labelled cases are</h3><span class="sub">Machine learning · main test</span></div>
+            <div class="ins-body"><div class="chartbox"><canvas id="chInsTop"></canvas></div><div class="ins-text" id="insTop"></div></div></div>
+          <div class="card"><div class="card-head"><h3><span class="ino">2</span>Graph features cut false alerts for the random forest, not for logistic regression</h3><span class="sub">Machine learning × graph features · main test</span></div>
+            <div class="ins-body"><div class="chartbox"><canvas id="chInsFp"></canvas></div><div class="ins-text" id="insFp"></div></div></div>
+          <div class="card" id="insGraphCard"><div class="card-head"><h3><span class="ino">3</span>Laundering transfers cross community boundaries and cluster in a few communities</h3><span class="sub">Graph analytics (Louvain) · Sep 1–18</span></div>
+            <div class="ins-body"><div class="ins-charts"><div class="chartbox"><canvas id="chInsCross"></canvas></div><div class="chartbox"><canvas id="chInsConc"></canvas></div></div><div class="ins-text" id="insGraph"></div></div></div>
+          <div class="card" id="insFmtCard"><div class="card-head"><h3><span class="ino">4</span>Labelled cases sit in ACH, and M4 only raises alerts there</h3><span class="sub">Machine learning × payment format · main test</span></div>
+            <div class="ins-body"><div class="chartbox"><canvas id="chInsFmt"></canvas></div><div class="ins-text" id="insFmt"></div></div></div>
+          <div class="card" id="insKnownCard"><div class="card-head"><h3><span class="ino">5</span>Accounts from earlier cases carry half of the next ones; their neighbours do not</h3><span class="sub">Account history and graph neighbours · Sep 1–10</span></div>
+            <div class="ins-body"><div class="chartbox"><canvas id="chInsKnown"></canvas></div><div class="ins-text" id="insKnown"></div></div></div>
+        </div>
+      </section>
+
       <!-- Overview -->
-      <section class="page on" id="sum">
+      <section class="page" id="sum">
         <div class="page-head"><div><h1>Overview</h1><p>Alert volume for the selected model and test period. Risk scores rank transactions for review priority; they do not establish that a transaction is suspicious.</p></div></div>
         <div class="stats" id="kpis"></div>
         <div class="grid g2">
@@ -199,18 +231,20 @@ function init(){
   let t = ''; try{ t = localStorage.getItem('aml-theme') || ''; }catch(_){}
   $$('#theme button').forEach(b => { b.classList.toggle('on', b.dataset.v === t); b.onclick = () => setTheme(b.dataset.v); });
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', rerender);
-  const h = new URLSearchParams(location.search).get('tab') || location.hash.slice(1); render(); renderEval(); renderPipe(); if (h && $('#' + h)) tab(h);
+  const h = new URLSearchParams(location.search).get('tab') || location.hash.slice(1); render(); renderIns(); renderEval(); renderPipe(); tab(h && $('#' + h) ? h : 'ins');
 }
 function setTheme(v){
   if (v) document.documentElement.dataset.theme = v; else delete document.documentElement.dataset.theme;
   try{ localStorage.setItem('aml-theme', v); }catch(_){}
   $$('#theme button').forEach(b => b.classList.toggle('on', b.dataset.v === v)); rerender();
 }
-function rerender(){ render(); renderEval(); renderPipe(); graph.restyle(); }
+function rerender(){ render(); renderIns(); renderEval(); renderPipe(); graph.restyle(); }
 function tab(t){
   $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
   $$('.content > section').forEach(s => s.classList.toggle('on', s.id === t));
   $('#crumb').textContent = $(`#tabs button[data-t="${t}"]`).textContent;
+  // model and period pickers do not apply to the Insights page, which always shows the main test period
+  document.body.classList.toggle('on-ins', t === 'ins');
   history.replaceState(null, '', '#' + t);
   if (t === 'inv') requestAnimationFrame(() => graph.resize());
 }
@@ -312,6 +346,83 @@ function showGroup(x){
     ${Object.entries(x.sums).map(([c, s]) => `<tr><td>Total ${esc(cur(c))}</td><td>${nf2.format(s)}</td></tr>`).join('')}</tbody></table>
     <div class="nav-label" style="padding:14px 0 6px">Transfers</div>
     <table class="kv"><tbody>${x.edges.map(e => `<tr><td class="mono" style="font-size:11px">${esc(ts(e.ts))}${e === own ? ' <span class="badge alert plain">alert</span>' : ''}<div class="faint">${esc(e.fmt)} · ${esc(e.id)}</div></td><td>${nf2.format(e.amount)} ${esc(cur(e.cur))}</td></tr>`).join('')}</tbody></table>`;
+}
+
+function renderIns(){
+  const K = D.precision_at_k, pct = x => `${(100 * x).toFixed(1)}%`;
+  const rows = D.metrics.filter(r => r.split === 'test_main').map(r => ({...JSON.parse(r.metrics_json), model:r.model, meta:modelOf(r.model_version)}))
+    .filter(r => r.meta && r.meta.library !== 'xgboost').sort((a, b) => a.model.localeCompare(b.model));
+  const by = Object.fromEntries(rows.map(r => [r.model, r]));
+  const short = r => r.model === 'M0' ? 'M0 random order' : `${r.model} ${r.meta.algorithm.includes('forest') ? 'RF' : 'LR'}${r.meta.feature_set.includes('graph') ? ' + graph' : ''}`;
+  const best = rows.filter(r => r.model !== 'M0').reduce((a, b) => (b['precision_at_' + K] ?? 0) > (a['precision_at_' + K] ?? 0) ? b : a, rows[0]);
+  const hits = r => r['hits_at_' + K] ?? (r['precision_at_' + K] ?? 0) * K;
+  chart('chInsTop', {type:'bar', data:{labels:rows.map(short), datasets:[{label:`Labelled cases in top ${K}`, data:rows.map(hits),
+    backgroundColor:rows.map(r => r === best ? css('--brand') : css('--line-2')), borderRadius:4, barThickness:18}]},
+    options:{indexAxis:'y', plugins:{legend:{display:false}, tooltip:{callbacks:{label:c => `${nf2.format(c.raw)} of ${K}`}}},
+      scales:{x:{max:K, title:{display:true, text:`Labelled cases among the ${K} highest risk scores`, color:css('--muted')}, grid:{color:css('--line')}, ticks:{color:css('--muted')}, border:{display:false}}, y:{grid:{display:false}, ticks:{color:css('--ink-2')}, border:{display:false}}}}});
+  const other = rows.filter(r => r !== best && r.model !== 'M0').map(r => `${r.model} ${nf.format(hits(r))}`).join(', ');
+  $('#insTop').innerHTML = `<div class="big">${nf.format(hits(best))} <small>of the top ${K} ${best.model} alerts carry the laundering label</small></div>
+    <p>Other models: ${other}. Random order would find about ${nf2.format(hits(by.M0 ?? {}))}. Overall ${best.model} raises ${nf.format(best.tp + best.fp)} alerts in two days, with precision ${pct(best.precision)} and recall ${pct(best.recall)}.</p>
+    <div class="so"><b>Business reading</b>Analyst time is the bottleneck. Working the queue from the top of the ${best.model} risk ranking spends that time where the labelled cases are; the same capacity on M1 or M2 would find almost none.</div>`;
+
+  const ml = rows.filter(r => r.model !== 'M0');
+  chart('chInsFp', {type:'bar', data:{labels:ml.map(short), datasets:[
+    {label:'True alerts (TP)', data:ml.map(r => r.tp), backgroundColor:css('--brand'), borderRadius:4, maxBarThickness:28},
+    {label:'False alerts (FP)', data:ml.map(r => r.fp), backgroundColor:css('--risk'), borderRadius:4, maxBarThickness:28}]}});
+  const d = (a, b, k) => by[a] && by[b] ? `${nf.format(by[a][k])} → ${nf.format(by[b][k])}` : '–';
+  $('#insFp').innerHTML = `<div class="big">${d('M3', 'M4', 'fp')} <small>false alerts, random forest without → with graph features</small></div>
+    <p>True alerts ${d('M3', 'M4', 'tp')} for the random forest. For logistic regression the same features raise false alerts ${d('M1', 'M2', 'fp')} and leave precision@${K} at ${nf.format(hits(by.M2 ?? {}))}.</p>
+    <div class="so"><b>Business reading</b>Network context (earlier transfers between the same pair, number of distinct counterparties) lowers the review workload only when the model can use it. A new feature set should be accepted per model on the false alerts it adds, not assumed to help.</div>`;
+
+  renderOps(pct);
+  const g = D.graph;
+  if (!g){ $('#insGraphCard').hidden = true; return; }
+  chart('chInsCross', {type:'bar', data:{labels:['All transfers', 'Labelled transfers'], datasets:[{label:'Between two communities', data:[100 * g.cross_share_all, 100 * g.cross_share_laundering],
+    backgroundColor:[css('--line-2'), css('--risk')], borderRadius:4, maxBarThickness:46}]},
+    options:{plugins:{legend:{display:false}, title:{display:true, text:'Share crossing two communities (%)', color:css('--ink-2'), align:'start'},
+      tooltip:{callbacks:{label:c => `${nf2.format(c.raw)}%`}}}, scales:{y:{max:100}}}});
+  chart('chInsConc', {type:'line', data:{labels:g.curve.map((_, i) => i + 1), datasets:[{label:'Cumulative share of labelled transfers', data:g.curve.map(x => 100 * x),
+    borderColor:css('--brand'), backgroundColor:css('--brand-soft'), fill:true, pointRadius:0, borderWidth:2, tension:.2}]},
+    options:{plugins:{legend:{display:false}, title:{display:true, text:`Labelled transfers covered by the top N communities (%)`, color:css('--ink-2'), align:'start'},
+      tooltip:{callbacks:{title:c => `Top ${c[0].label} communities`, label:c => `${nf2.format(c.raw)}%`}}},
+      scales:{x:{ticks:{color:css('--muted'), maxTicksLimit:6}, grid:{display:false}}, y:{max:100}}}});
+  const top = g.top.filter(c => c.per_1000 > g.baseline_per_1000 * 2).slice(0, 3);
+  $('#insGraph').innerHTML = `<div class="big">${pct(g.cross_share_laundering)} <small>of labelled transfers link two communities, against ${pct(g.cross_share_all)} of all transfers</small></div>
+    <p>Louvain split ${nf.format(g.communities)} communities (modularity ${nf4.format(g.modularity)}). Labelled transfers touch ${nf.format(g.with_laundering)} of them; half sit in ${nf.format(g.reach_50)} communities and 80% in ${nf.format(g.reach_80)}.</p>
+    ${top.length ? `<table class="kv"><tbody>${top.map(c => `<tr><td>Community <span class="mono">${esc(c.community)}</span> · ${nf.format(c.size)} accounts</td><td class="num">${nf2.format(c.per_1000)} per 1,000 · ${nf2.format(c.per_1000 / g.baseline_per_1000)}× baseline</td></tr>`).join('')}</tbody></table>` : ''}
+    <div class="so"><b>Business reading</b>A transfer between two otherwise separate groups is a useful extra review signal, and a short list of communities with rates well above the ${nf2.format(g.baseline_per_1000)} per 1,000 baseline can be watched more closely. Communities were built from all transfers, so this is descriptive.</div>`;
+}
+
+function renderOps(pct){
+  const o = D.ops;
+  if (!o){ $('#insFmtCard').hidden = $('#insKnownCard').hidden = true; return; }
+  const sum = (rows, k) => rows.reduce((a, r) => a + (r[k] ?? 0), 0);
+  const fm = o.by_format, N = sum(fm, 'n'), P = sum(fm, 'pos'), A = sum(fm, 'alerts');
+  chart('chInsFmt', {type:'bar', data:{labels:fm.map(r => r.k), datasets:[
+    {label:'Share of transactions', data:fm.map(r => 100 * r.n / N), backgroundColor:css('--line-2'), borderRadius:4, barThickness:10},
+    {label:'Share of labelled cases', data:fm.map(r => 100 * r.pos / P), backgroundColor:css('--brand'), borderRadius:4, barThickness:10},
+    {label:'Share of M4 alerts', data:fm.map(r => A ? 100 * (r.alerts ?? 0) / A : 0), backgroundColor:css('--risk'), borderRadius:4, barThickness:10}]},
+    options:{indexAxis:'y', plugins:{tooltip:{callbacks:{label:c => `${c.dataset.label}: ${nf2.format(c.raw)}%`}}},
+      scales:{x:{max:100, grid:{color:css('--line')}, ticks:{color:css('--muted')}, border:{display:false}}, y:{grid:{display:false}, ticks:{color:css('--ink-2')}, border:{display:false}}}}});
+  const ach = fm.find(r => r.k === 'ACH') || {n:0, pos:0, alerts:0}, rest = fm.filter(r => r.k !== 'ACH');
+  const restPos = sum(rest, 'pos'), restAlerts = sum(rest, 'alerts'), restMax = Math.max(0, ...rest.map(r => r.n ? r.pos / r.n : 0));
+  $('#insFmt').innerHTML = `<div class="big">${pct(ach.pos / P)} <small>of labelled cases are ACH transfers, which are ${pct(ach.n / N)} of all transactions</small></div>
+    <p>The label-1 rate in ACH is ${(100 * ach.pos / ach.n).toFixed(2)}%, against at most ${(100 * restMax).toFixed(2)}% in any other format. ${A ? `${pct((ach.alerts ?? 0) / A)} of the ${nf.format(A)} M4 alerts are ACH, so ${nf.format(restPos)} labelled cases in other formats receive ${nf.format(restAlerts)} alerts.` : ''}</p>
+    <div class="so"><b>Business reading</b>Putting review effort on ACH is justified. The other channels are not covered by the model at this threshold and need another control, such as existing rules or the watchlist in insight 5.</div>`;
+
+  const T = o.tiers, tier = (t, ach) => T.filter(r => r.tier === t && (ach == null || !!r.ach === ach));
+  const agg = rows => ({n:sum(rows, 'n'), pos:sum(rows, 'pos'), tp:rows.some(r => r.tp != null) ? sum(rows, 'tp') : null});
+  const names = {known:'Touches a known account', hop:'One hop from a known account', other:'Neither'};
+  const tiers = ['known', 'hop', 'other'].map(t => ({t, ...agg(tier(t))})), TN = sum(tiers, 'n'), TP = sum(tiers, 'pos');
+  chart('chInsKnown', {type:'bar', data:{labels:tiers.map(r => names[r.t]), datasets:[
+    {label:'Share of transactions', data:tiers.map(r => 100 * r.n / TN), backgroundColor:css('--line-2'), borderRadius:4, maxBarThickness:34},
+    {label:'Share of labelled cases', data:tiers.map(r => 100 * r.pos / TP), backgroundColor:css('--brand'), borderRadius:4, maxBarThickness:34}]},
+    options:{plugins:{tooltip:{callbacks:{label:c => `${c.dataset.label}: ${nf2.format(c.raw)}%`}}}, scales:{y:{max:100}}}});
+  const [k, h, x] = tiers, kA = agg(tier('known', true)), oA = agg([...tier('hop', true), ...tier('other', true)]), kN = agg(tier('known', false)), allN = agg(T.filter(r => !r.ach));
+  const rate = r => r.n ? 100 * r.pos / r.n : 0;
+  $('#insKnown').innerHTML = `<div class="big">${pct(k.pos / TP)} <small>of labelled cases touch an account already seen in a labelled transfer on Sep 1–8 (${pct(k.n / TN)} of transactions)</small></div>
+    <p>Within ACH, ${nf.format(kA.n)} such transactions have a label-1 rate of ${rate(kA).toFixed(1)}%, against ${rate(oA).toFixed(2)}% for other ACH transfers. Outside ACH they hold ${nf.format(kN.pos)} of the ${nf.format(allN.pos)} labelled cases, but spread over ${nf.format(kN.n)} transactions (${rate(kN).toFixed(2)}%). Going one transfer further adds nothing: ${rate(h).toFixed(3)}% against ${rate(x).toFixed(3)}% for unrelated transactions.${k.tp != null ? ` M4 already alerts on ${nf.format(k.tp)} of the ${nf.format(k.pos)} cases on known accounts.` : ''}</p>
+    <div class="so"><b>Business reading</b>A watchlist of accounts from earlier cases is a sharp signal for ACH and the only lead on the cases M4 misses outside ACH; there it needs ranking, not a review of every transaction. Do not widen it to neighbours. In a bank the list comes from investigation outcomes, which arrive with a delay.</div>`;
 }
 
 function renderEval(){
