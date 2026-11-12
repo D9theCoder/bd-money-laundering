@@ -154,7 +154,8 @@ services:
       MLFLOW_TRACKING_URI: http://mlflow:5000
     ports:
       - "127.0.0.1:8081:8080"
-      - "127.0.0.1:4040:4040"
+      # Host 4040 can fall inside the port range Windows reserves for Hyper-V, so the Spark UI uses 14040.
+      - "127.0.0.1:14040:4040"
     volumes:
       - ./pipeline:/opt/aml/pipeline:ro
       - ./web:/opt/aml/web:ro
